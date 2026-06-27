@@ -10,6 +10,8 @@ from openai import OpenAI
 from src.prompts import (
     CONTEXTUALIZATION_SYSTEM_PROMPT,
     CONTEXTUALIZATION_USER_PROMPT_TEMPLATE,
+    EXTRACTION_SYSTEM_PROMPT,
+    EXTRACTION_USER_PROMPT_TEMPLATE,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +61,15 @@ class VisionSettings:
 
 @dataclass(frozen=True)
 class ContextualizationSettings:
+    model: str
+    temperature: float
+    max_tokens: int
+    system_prompt: str
+    user_prompt_template: str
+
+
+@dataclass(frozen=True)
+class ExtractionSettings:
     model: str
     temperature: float
     max_tokens: int
@@ -128,14 +139,53 @@ def load_contextualization_settings() -> ContextualizationSettings:
     )
 
 
+def _create_chat_llm(
+    settings: Settings,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+) -> ChatOpenAI:
+    """Create a LangChain chat model with shared project credentials."""
+    return ChatOpenAI(
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        api_key=settings.openai_api_key,
+    )
+
+
 def create_contextualization_llm(
     settings: Settings,
     agent_settings: ContextualizationSettings,
 ) -> ChatOpenAI:
     """Create a LangChain chat model for the contextualization agent."""
-    return ChatOpenAI(
-        model=agent_settings.model,
-        temperature=agent_settings.temperature,
-        max_tokens=agent_settings.max_tokens,
-        api_key=settings.openai_api_key,
+    return _create_chat_llm(
+        settings,
+        agent_settings.model,
+        agent_settings.temperature,
+        agent_settings.max_tokens,
+    )
+
+
+def load_extraction_settings() -> ExtractionSettings:
+    """Load extraction agent configuration."""
+    return ExtractionSettings(
+        model=os.getenv("OPENAI_EXTRACTION_MODEL", "gpt-4o"),
+        temperature=float(os.getenv("OPENAI_EXTRACTION_TEMPERATURE", "0")),
+        max_tokens=int(os.getenv("OPENAI_EXTRACTION_MAX_TOKENS", "4096")),
+        system_prompt=EXTRACTION_SYSTEM_PROMPT,
+        user_prompt_template=EXTRACTION_USER_PROMPT_TEMPLATE,
+    )
+
+
+def create_extraction_llm(
+    settings: Settings,
+    agent_settings: ExtractionSettings,
+) -> ChatOpenAI:
+    """Create a LangChain chat model for the extraction agent."""
+    return _create_chat_llm(
+        settings,
+        agent_settings.model,
+        agent_settings.temperature,
+        agent_settings.max_tokens,
     )

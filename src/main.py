@@ -1,6 +1,8 @@
+import json
 import sys
 
 from src.agents.contextualization_agent import ContextualizationAgent
+from src.agents.extraction_agent import ExtractionAgent
 from src.config import (
     create_langfuse_client,
     create_openai_client,
@@ -34,10 +36,16 @@ def main() -> None:
         amendment_text = parse_contract_image(amendment_path, openai_client=openai_client)
 
         print("\nBuilding contextual map...")
-        agent = ContextualizationAgent()
-        context_map = agent.analyze(original_text, amendment_text)
+        context_agent = ContextualizationAgent()
+        context_map = context_agent.analyze(original_text, amendment_text)
         print("\n--- Contextual map ---\n")
         print(context_map)
+
+        print("\nExtracting contract changes...")
+        extraction_agent = ExtractionAgent()
+        result = extraction_agent.analyze(original_text, amendment_text, context_map)
+        print("\n--- Validated output ---\n")
+        print(json.dumps(result.model_dump(), indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
