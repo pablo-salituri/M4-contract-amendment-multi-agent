@@ -185,7 +185,10 @@ def _call_vision_model(
     return _extract_response_text(message.content)
 
 
-def parse_contract_image(image_path: str) -> str:
+def parse_contract_image(
+    image_path: str,
+    openai_client: OpenAI | None = None,
+) -> str:
     """Extract plain text from a contract image using GPT-4o Vision."""
     path = Path(image_path)
     vision_settings = load_vision_settings()
@@ -193,7 +196,6 @@ def parse_contract_image(image_path: str) -> str:
     _validate_image_path(path, vision_settings)
     encoded_image, mime_type = _read_and_encode_image(path, vision_settings)
 
-    settings = load_settings()
-    client = create_openai_client(settings)
+    client = openai_client or create_openai_client(load_settings())
 
     return _call_vision_model(client, encoded_image, mime_type, vision_settings)

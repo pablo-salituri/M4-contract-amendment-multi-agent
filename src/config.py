@@ -3,8 +3,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
 from langfuse import Langfuse
 from openai import OpenAI
+
+from src.prompts import (
+    CONTEXTUALIZATION_SYSTEM_PROMPT,
+    CONTEXTUALIZATION_USER_PROMPT_TEMPLATE,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -49,6 +55,15 @@ class VisionSettings:
     supported_extensions: frozenset[str]
     extension_to_mime_type: dict[str, str]
     extraction_prompt: str
+
+
+@dataclass(frozen=True)
+class ContextualizationSettings:
+    model: str
+    temperature: float
+    max_tokens: int
+    system_prompt: str
+    user_prompt_template: str
 
 
 def load_settings() -> Settings:
@@ -99,4 +114,28 @@ def load_vision_settings() -> VisionSettings:
         supported_extensions=SUPPORTED_IMAGE_EXTENSIONS,
         extension_to_mime_type=EXTENSION_TO_MIME_TYPE,
         extraction_prompt=CONTRACT_EXTRACTION_PROMPT,
+    )
+
+
+def load_contextualization_settings() -> ContextualizationSettings:
+    """Load contextualization agent configuration."""
+    return ContextualizationSettings(
+        model=os.getenv("OPENAI_CONTEXTUALIZATION_MODEL", "gpt-4o"),
+        temperature=float(os.getenv("OPENAI_CONTEXTUALIZATION_TEMPERATURE", "0")),
+        max_tokens=int(os.getenv("OPENAI_CONTEXTUALIZATION_MAX_TOKENS", "4096")),
+        system_prompt=CONTEXTUALIZATION_SYSTEM_PROMPT,
+        user_prompt_template=CONTEXTUALIZATION_USER_PROMPT_TEMPLATE,
+    )
+
+
+def create_contextualization_llm(
+    settings: Settings,
+    agent_settings: ContextualizationSettings,
+) -> ChatOpenAI:
+    """Create a LangChain chat model for the contextualization agent."""
+    return ChatOpenAI(
+        model=agent_settings.model,
+        temperature=agent_settings.temperature,
+        max_tokens=agent_settings.max_tokens,
+        api_key=settings.openai_api_key,
     )
