@@ -1,5 +1,7 @@
 """Extraction agent for identifying contract amendment changes."""
 
+import re
+
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
@@ -12,6 +14,12 @@ from src.config import (
     load_settings,
 )
 from src.models import ContractChangeOutput
+
+_BULLET_PREFIX = re.compile(r"^[\s]*[-*•]\s+", re.MULTILINE)
+_NUMBERED_PREFIX = re.compile(r"^[\s]*\d+[.)]\s+", re.MULTILINE)
+_MARKDOWN_EMPHASIS = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_")
+_WHITESPACE = re.compile(r"[ \t]+")
+_BLANK_LINES = re.compile(r"\n{3,}")
 
 
 class ExtractionAgentError(Exception):
@@ -80,7 +88,8 @@ class ExtractionAgent:
         except APIError as exc:
             raise ExtractionModelError(f"OpenAI API error: {exc}") from exc
 
-        return self._validate_output(result)
+        validated = self._validate_output(result)
+        return self._normalize_output(validated)
 
     @staticmethod
     def _validate_input(value: str, label: str) -> None:
@@ -98,3 +107,40 @@ class ExtractionAgent:
             raise ExtractionValidationError(
                 f"Model output failed Pydantic validation: {exc}"
             ) from exc
+
+    @staticmethod
+    def _normalize_output(result: ContractChangeOutput) -> ContractChangeOutput:
+        """Apply lightweight post-processing for consistent, plain-text output."""
+        return ContractChangeOutput(
+            sections_changed=result.sections_changed,
+            topics_touched=ExtractionAgent._normalize_topics(result.topics_touched),
+            summary_of_the_change=ExtractionAgent._sanitize_summary(
+                result.summary_of_the_change
+            ),
+        )
+
+    @staticmethod
+    def _normalize_topics(topics: list[str]) -> list[str]:
+        """Deduplicate topics and enforce consistent lowercase phrasing."""
+        normalized: list[str] = []
+        seen: set[str] = set()
+
+        for topic in topics:
+            cleaned = _WHITESPACE.sub(" ", topic.strip()).lower()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                normalized.append(cleaned)
+
+        return normalized
+
+    @staticmethod
+    def _sanitize_summary(summary: str) -> str:
+        """Strip markdown artifacts and normalize whitespace in the summary."""
+        text = summary.strip()
+        text = _BULLET_PREFIX.sub("", text)
+        text = _NUMBERED_PREFIX.sub("", text)
+        text = _MARKDOWN_EMPHASIS.sub(
+            lambda match: next(group for group in match.groups() if group), text
+        )
+        text = _BLANK_LINES.sub("\n\n", text)
+        return text.strip()
