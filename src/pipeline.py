@@ -7,6 +7,22 @@ from openai import OpenAI
 
 from src.agents.contextualization_agent import ContextualizationAgent
 from src.agents.extraction_agent import ExtractionAgent
+from src.config import (
+    PIPELINE_VERSION,
+    PROJECT_NAME,
+    ContextualizationSettings,
+    ExtractionSettings,
+    Settings,
+    VisionSettings,
+    create_contextualization_llm,
+    create_extraction_llm,
+    create_langfuse_client,
+    create_openai_client,
+    load_contextualization_settings,
+    load_extraction_settings,
+    load_settings,
+    load_vision_settings,
+)
 from src.image_parser import ImageParserError, parse_contract_image
 from src.models import ContractChangeOutput
 
@@ -18,6 +34,8 @@ TEXT_PREVIEW_LENGTH = 500
 class PipelineClients:
     openai_client: OpenAI
     langfuse_client: Langfuse
+    contextualization_agent: ContextualizationAgent
+    extraction_agent: ExtractionAgent
 
 
 class PipelineError(Exception):
@@ -26,6 +44,42 @@ class PipelineError(Exception):
     def __init__(self, stage: str, message: str) -> None:
         self.stage = stage
         super().__init__(f"[{stage}] {message}")
+
+
+def create_pipeline_clients(settings: Settings | None = None) -> PipelineClients:
+    """Create reusable clients and agents for a pipeline run."""
+    resolved_settings = settings or load_settings()
+    contextualization_settings = load_contextualization_settings()
+    extraction_settings = load_extraction_settings()
+
+    return PipelineClients(
+        openai_client=create_openai_client(resolved_settings),
+        langfuse_client=create_langfuse_client(resolved_settings),
+        contextualization_agent=ContextualizationAgent(
+            llm=create_contextualization_llm(
+                resolved_settings, contextualization_settings
+            ),
+            agent_settings=contextualization_settings,
+        ),
+        extraction_agent=ExtractionAgent(
+            llm=create_extraction_llm(resolved_settings, extraction_settings),
+            agent_settings=extraction_settings,
+        ),
+    )
+
+
+def _build_stage_metadata(
+    stage: str,
+    model: str,
+    temperature: float,
+) -> dict[str, str | float]:
+    return {
+        "project_name": PROJECT_NAME,
+        "pipeline_version": PIPELINE_VERSION,
+        "stage": stage,
+        "model": model,
+        "temperature": temperature,
+    }
 
 
 def _text_preview(text: str) -> str:
@@ -49,6 +103,15 @@ def run_pipeline(
 ) -> ContractChangeOutput:
     """Run the full contract analysis pipeline and return validated output."""
     langfuse = clients.langfuse_client
+    vision_settings = load_vision_settings()
+    contextualization_settings = load_contextualization_settings()
+    extraction_settings = load_extraction_settings()
+
+    root_metadata = {
+        "project_name": PROJECT_NAME,
+        "pipeline_version": PIPELINE_VERSION,
+        "stage": "pipeline",
+    }
 
     try:
         with langfuse.start_as_current_observation(
@@ -58,18 +121,35 @@ def run_pipeline(
                 "original_image_path": original_image_path,
                 "amendment_image_path": amendment_image_path,
             },
+            metadata=root_metadata,
+            version=PIPELINE_VERSION,
         ) as root_span:
             original_text = _parse_original_contract(
-                langfuse, clients.openai_client, original_image_path
+                langfuse,
+                clients.openai_client,
+                original_image_path,
+                vision_settings,
             )
             amendment_text = _parse_amendment_contract(
-                langfuse, clients.openai_client, amendment_image_path
+                langfuse,
+                clients.openai_client,
+                amendment_image_path,
+                vision_settings,
             )
             context_map = _run_contextualization(
-                langfuse, original_text, amendment_text
+                langfuse,
+                clients.contextualization_agent,
+                original_text,
+                amendment_text,
+                contextualization_settings,
             )
             result = _run_extraction(
-                langfuse, original_text, amendment_text, context_map
+                langfuse,
+                clients.extraction_agent,
+                original_text,
+                amendment_text,
+                context_map,
+                extraction_settings,
             )
 
             root_span.update(output=result.model_dump())
@@ -82,17 +162,30 @@ def _parse_original_contract(
     langfuse: Langfuse,
     openai_client: OpenAI,
     image_path: str,
+    vision_settings: VisionSettings,
 ) -> str:
+    stage = "parse_original_contract"
     with langfuse.start_as_current_observation(
         as_type="span",
-        name="parse_original_contract",
+        name=stage,
         input={"image_path": image_path},
+        metadata=_build_stage_metadata(
+            stage,
+            vision_settings.model,
+            vision_settings.temperature,
+        ),
+        model=vision_settings.model,
+        model_parameters={"temperature": vision_settings.temperature},
     ) as span:
         try:
-            text = parse_contract_image(image_path, openai_client=openai_client)
+            text = parse_contract_image(
+                image_path,
+                openai_client=openai_client,
+                vision_settings=vision_settings,
+            )
         except ImageParserError as exc:
             _record_stage_error(span, exc)
-            raise PipelineError("parse_original_contract", str(exc)) from exc
+            raise PipelineError(stage, str(exc)) from exc
 
         span.update(
             output={
@@ -107,17 +200,30 @@ def _parse_amendment_contract(
     langfuse: Langfuse,
     openai_client: OpenAI,
     image_path: str,
+    vision_settings: VisionSettings,
 ) -> str:
+    stage = "parse_amendment_contract"
     with langfuse.start_as_current_observation(
         as_type="span",
-        name="parse_amendment_contract",
+        name=stage,
         input={"image_path": image_path},
+        metadata=_build_stage_metadata(
+            stage,
+            vision_settings.model,
+            vision_settings.temperature,
+        ),
+        model=vision_settings.model,
+        model_parameters={"temperature": vision_settings.temperature},
     ) as span:
         try:
-            text = parse_contract_image(image_path, openai_client=openai_client)
+            text = parse_contract_image(
+                image_path,
+                openai_client=openai_client,
+                vision_settings=vision_settings,
+            )
         except ImageParserError as exc:
             _record_stage_error(span, exc)
-            raise PipelineError("parse_amendment_contract", str(exc)) from exc
+            raise PipelineError(stage, str(exc)) from exc
 
         span.update(
             output={
@@ -130,23 +236,32 @@ def _parse_amendment_contract(
 
 def _run_contextualization(
     langfuse: Langfuse,
+    agent: ContextualizationAgent,
     original_text: str,
     amendment_text: str,
+    agent_settings: ContextualizationSettings,
 ) -> str:
+    stage = "contextualization_agent"
     with langfuse.start_as_current_observation(
         as_type="span",
-        name="contextualization_agent",
+        name=stage,
         input={
             "original_text_length": len(original_text),
             "amendment_text_length": len(amendment_text),
         },
+        metadata=_build_stage_metadata(
+            stage,
+            agent_settings.model,
+            agent_settings.temperature,
+        ),
+        model=agent_settings.model,
+        model_parameters={"temperature": agent_settings.temperature},
     ) as span:
-        agent = ContextualizationAgent()
         try:
             context_map = agent.analyze(original_text, amendment_text)
         except Exception as exc:
             _record_stage_error(span, exc)
-            raise PipelineError("contextualization_agent", str(exc)) from exc
+            raise PipelineError(stage, str(exc)) from exc
 
         span.update(
             output={
@@ -159,25 +274,34 @@ def _run_contextualization(
 
 def _run_extraction(
     langfuse: Langfuse,
+    agent: ExtractionAgent,
     original_text: str,
     amendment_text: str,
     context_map: str,
+    agent_settings: ExtractionSettings,
 ) -> ContractChangeOutput:
+    stage = "extraction_agent"
     with langfuse.start_as_current_observation(
         as_type="span",
-        name="extraction_agent",
+        name=stage,
         input={
             "original_text_length": len(original_text),
             "amendment_text_length": len(amendment_text),
             "context_map_length": len(context_map),
         },
+        metadata=_build_stage_metadata(
+            stage,
+            agent_settings.model,
+            agent_settings.temperature,
+        ),
+        model=agent_settings.model,
+        model_parameters={"temperature": agent_settings.temperature},
     ) as span:
-        agent = ExtractionAgent()
         try:
             result = agent.analyze(original_text, amendment_text, context_map)
         except Exception as exc:
             _record_stage_error(span, exc)
-            raise PipelineError("extraction_agent", str(exc)) from exc
+            raise PipelineError(stage, str(exc)) from exc
 
         span.update(output=result.model_dump())
         return result

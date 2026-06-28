@@ -15,6 +15,8 @@ from src.prompts import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_NAME = "contract-amendment-multi-agent"
+PIPELINE_VERSION = "1.0.0"
 
 # Single entry point for environment variables across the project.
 load_dotenv(PROJECT_ROOT / ".env")
