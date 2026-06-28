@@ -68,6 +68,30 @@ def _validate_image_path(image_path: Path, vision_settings: VisionSettings) -> N
         )
 
 
+def _validate_image_size(image_path: Path) -> None:
+    try:
+        file_size = image_path.stat().st_size
+    except OSError as exc:
+        raise ImageReadError(
+            f"Unable to read file size for '{image_path}': {exc}"
+        ) from exc
+
+    if file_size == 0:
+        raise ImageReadError(f"Image file is empty (0 bytes): {image_path}")
+
+
+def validate_contract_image_file(
+    image_path: Path | str,
+    vision_settings: VisionSettings | None = None,
+) -> Path:
+    """Validate an image path before sending data to OpenAI."""
+    path = Path(image_path)
+    resolved_settings = vision_settings or load_vision_settings()
+    _validate_image_path(path, resolved_settings)
+    _validate_image_size(path)
+    return path
+
+
 def _detect_image_format(image_bytes: bytes) -> str | None:
     for signature, extension in _IMAGE_SIGNATURES:
         if image_bytes.startswith(signature):
@@ -191,10 +215,8 @@ def parse_contract_image(
     vision_settings: VisionSettings | None = None,
 ) -> str:
     """Extract plain text from a contract image using GPT-4o Vision."""
-    path = Path(image_path)
     resolved_vision_settings = vision_settings or load_vision_settings()
-
-    _validate_image_path(path, resolved_vision_settings)
+    path = validate_contract_image_file(image_path, resolved_vision_settings)
     encoded_image, mime_type = _read_and_encode_image(path, resolved_vision_settings)
 
     client = openai_client or create_openai_client(load_settings())

@@ -24,6 +24,7 @@ from src.config import (
     load_vision_settings,
 )
 from src.image_parser import ImageParserError, parse_contract_image
+from src.input_validation import InputValidationError, validate_pipeline_inputs
 from src.models import ContractChangeOutput
 
 TRACE_NAME = "contract-analysis"
@@ -43,7 +44,11 @@ class PipelineError(Exception):
 
     def __init__(self, stage: str, message: str) -> None:
         self.stage = stage
-        super().__init__(f"[{stage}] {message}")
+        self.message = message
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return self.message
 
 
 def create_pipeline_clients(settings: Settings | None = None) -> PipelineClients:
@@ -102,6 +107,11 @@ def run_pipeline(
     clients: PipelineClients,
 ) -> ContractChangeOutput:
     """Run the full contract analysis pipeline and return validated output."""
+    try:
+        validate_pipeline_inputs(original_image_path, amendment_image_path)
+    except InputValidationError as exc:
+        raise PipelineError(exc.stage, exc.message) from exc
+
     langfuse = clients.langfuse_client
     vision_settings = load_vision_settings()
     contextualization_settings = load_contextualization_settings()
