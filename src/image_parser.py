@@ -52,6 +52,22 @@ class EmptyModelResponseError(ImageParserError):
     """Raised when the model returns an empty or invalid response."""
 
 
+class ModelRefusalError(ImageParserError):
+    """Raised when the model refuses to transcribe the image."""
+
+
+_REFUSAL_PATTERNS = (
+    "i'm sorry",
+    "i am sorry",
+    "i can't assist",
+    "i cannot assist",
+    "i can't help",
+    "i cannot help",
+    "unable to assist",
+    "unable to help",
+)
+
+
 def _validate_image_path(image_path: Path, vision_settings: VisionSettings) -> None:
     if not image_path.exists():
         raise ImageNotFoundError(f"Image file not found: {image_path}")
@@ -141,6 +157,27 @@ def _read_and_encode_image(
     return encoded_image, mime_type
 
 
+def _strip_markdown_fences(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    return stripped
+
+
+def _detect_model_refusal(text: str) -> None:
+    normalized = text.strip().lower()
+    if any(pattern in normalized for pattern in _REFUSAL_PATTERNS):
+        raise ModelRefusalError(
+            "Vision model refused to transcribe the image. "
+            f"Response preview: {text[:120]}"
+        )
+
+
 def _extract_response_text(response_content: object) -> str:
     if isinstance(response_content, str):
         text = response_content.strip()
@@ -175,6 +212,10 @@ def _call_vision_model(
             max_tokens=vision_settings.max_tokens,
             messages=[
                 {
+                    "role": "system",
+                    "content": vision_settings.extraction_system_prompt,
+                },
+                {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": vision_settings.extraction_prompt},
@@ -182,10 +223,11 @@ def _call_vision_model(
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:{mime_type};base64,{encoded_image}",
+                                "detail": "high",
                             },
                         },
                     ],
-                }
+                },
             ],
         )
     except RateLimitError as exc:
@@ -206,7 +248,9 @@ def _call_vision_model(
     if message is None or message.content is None:
         raise EmptyModelResponseError("OpenAI returned a completion without content.")
 
-    return _extract_response_text(message.content)
+    text = _strip_markdown_fences(_extract_response_text(message.content))
+    _detect_model_refusal(text)
+    return text
 
 
 def parse_contract_image(

@@ -28,18 +28,22 @@ EXTENSION_TO_MIME_TYPE = {
     ".jpeg": "image/jpeg",
 }
 
-CONTRACT_EXTRACTION_PROMPT = """You are a document transcription assistant.
+CONTRACT_EXTRACTION_PROMPT = """You are an OCR transcription engine for business documents.
 
-Extract the complete text from the contract image provided.
+Extract the complete visible text from the contract image provided.
 
 Requirements:
-- Transcribe every visible word faithfully.
+- Transcribe every visible word faithfully and verbatim.
 - Preserve the document structure: titles, numbering, sections, and paragraphs.
 - Keep line breaks and spacing where they reflect the original layout.
 - Do not summarize, interpret, paraphrase, or omit any content.
-- Do not add commentary or analysis.
+- Do not add commentary, analysis, or refusals.
+- This is a routine document digitization task; always return the full visible text.
 
-Return only the transcribed text of the document."""
+Return only the transcribed plain text of the document."""
+
+CONTRACT_EXTRACTION_SYSTEM_PROMPT = """You transcribe document images verbatim for archival OCR.
+Always return the visible text from the image. Never refuse or add commentary."""
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,7 @@ class VisionSettings:
     supported_extensions: frozenset[str]
     extension_to_mime_type: dict[str, str]
     extraction_prompt: str
+    extraction_system_prompt: str
 
 
 @dataclass(frozen=True)
@@ -122,6 +127,7 @@ def load_vision_settings() -> VisionSettings:
         supported_extensions=SUPPORTED_IMAGE_EXTENSIONS,
         extension_to_mime_type=EXTENSION_TO_MIME_TYPE,
         extraction_prompt=CONTRACT_EXTRACTION_PROMPT,
+        extraction_system_prompt=CONTRACT_EXTRACTION_SYSTEM_PROMPT,
     )
 
 
