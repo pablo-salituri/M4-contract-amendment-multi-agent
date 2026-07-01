@@ -10,11 +10,11 @@ if hasattr(sys.stderr, "reconfigure"):
 
 _THEME = Theme(
     {
-        "info": "dim",
+        "info": "white",
         "success": "green",
-        "error": "bold red",
-        "title": "bold blue",
-        "step": "cyan",
+        "error": "bold medium_purple3",
+        "title": "bold medium_purple3",
+        "step": "medium_purple3",
         "path": "white",
     }
 )

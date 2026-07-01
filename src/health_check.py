@@ -16,7 +16,7 @@ _current_step: tuple[int, str] | None = None
 
 def run_health_check() -> None:
     console.print()
-    console.print(Panel("🔍 Running health check...", border_style="dim", expand=False))
+    console.print(Panel("🔍 Running health check...", border_style="medium_purple3", expand=False))
     _check_env_file()
     settings = _check_required_settings()
     _check_openai_api_key(settings)

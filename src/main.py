@@ -2,8 +2,7 @@ import json
 import sys
 
 from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.table import Table
+from rich.text import Text
 
 from src.console_ui import console, err_console
 from src.health_check import run_health_check
@@ -19,19 +18,19 @@ def _exit_with_error(stage: str, message: str) -> None:
 
 
 def _print_welcome(original_image_path: str, amendment_image_path: str) -> None:
-    table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column(style="info", min_width=12)
-    table.add_column(style="path")
-    table.add_row("📄 Original", original_image_path)
-    table.add_row("📄 Amendment", amendment_image_path)
+    content = Text()
+    content.append("📄 Original\n", style="step")
+    content.append(f"{original_image_path}\n\n", style="path")
+    content.append("📄 Amendment\n", style="step")
+    content.append(amendment_image_path, style="path")
 
     console.print()
     console.print(
         Panel(
-            table,
+            content,
             title="[title]Contract Amendment Analysis[/]",
             subtitle="[info]Comparing contract images[/]",
-            border_style="blue",
+            border_style="medium_purple3",
             padding=(1, 2),
         )
     )
@@ -73,7 +72,7 @@ def main() -> None:
     json_output = json.dumps(result.model_dump(), indent=2, ensure_ascii=False)
     console.print(
         Panel(
-            Syntax(json_output, "json", word_wrap=True, background_color="default"),
+            Text(json_output, style="path"),
             title="[title]📄 Result[/]",
             border_style="green",
             padding=(1, 2),
