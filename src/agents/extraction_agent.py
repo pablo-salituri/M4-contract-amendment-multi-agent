@@ -11,6 +11,7 @@ from src.config import (
     load_extraction_settings,
     load_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_langchain
 from src.models import ContractChangeOutput
 
 _BULLET_PREFIX = re.compile(r"^[\s]*[-*•]\s+", re.MULTILINE)
@@ -50,14 +51,17 @@ class ExtractionAgent:
             self._llm = llm
 
         #Tells LangChain/OpenAI to respond in JSON according to that model's schema.
-        self._structured_llm = self._llm.with_structured_output(ContractChangeOutput)
+        self._structured_llm = self._llm.with_structured_output(
+            ContractChangeOutput,
+            include_raw=True,
+        )
 
     def analyze(
         self,
         original_contract_text: str,
         amendment_contract_text: str,
         contextual_map: str,
-    ) -> ContractChangeOutput:
+    ) -> tuple[ContractChangeOutput, UsageDetails | None]:
         #Returns a Pydantic-validated result.
         
         self._validate_input(original_contract_text, "original contract")
@@ -76,7 +80,7 @@ class ExtractionAgent:
         ]
 
         try:
-            result = self._structured_llm.invoke(messages)
+            response = self._structured_llm.invoke(messages)
         except RateLimitError as exc:
             raise ExtractionModelError(f"OpenAI rate limit exceeded: {exc}") from exc
         except APITimeoutError as exc:
@@ -86,8 +90,19 @@ class ExtractionAgent:
         except APIError as exc:
             raise ExtractionModelError(f"OpenAI API error: {exc}") from exc
 
-        validated = self._validate_output(result)
-        return self._normalize_output(validated)
+        usage_details = None
+        if isinstance(response, dict):
+            raw_message = response.get("raw")
+            if raw_message is not None:
+                usage_details = usage_details_from_langchain(
+                    getattr(raw_message, "usage_metadata", None)
+                )
+            parsed = response.get("parsed")
+        else:
+            parsed = response
+
+        validated = self._validate_output(parsed)
+        return self._normalize_output(validated), usage_details
 
     @staticmethod
     def _validate_input(value: str, label: str) -> None:

@@ -8,6 +8,7 @@ from src.config import (
     load_contextualization_settings,
     load_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_langchain
 
 
 class ContextualizationAgentError(Exception):
@@ -43,7 +44,7 @@ class ContextualizationAgent:
         self,
         original_contract_text: str,
         amendment_contract_text: str,
-    ) -> str:
+    ) -> tuple[str, UsageDetails | None]:
         
         self._validate_contract_text(original_contract_text, "original")
         self._validate_contract_text(amendment_contract_text, "amendment")
@@ -89,7 +90,7 @@ class ContextualizationAgent:
         if not context_map:
             raise EmptyContextMapError("Model returned an empty contextual map.")
 
-        return context_map
+        return context_map, usage_details_from_langchain(response.usage_metadata)
 
     @staticmethod
     def _validate_contract_text(contract_text: str, label: str) -> None:

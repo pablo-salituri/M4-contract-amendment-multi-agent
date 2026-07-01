@@ -17,6 +17,7 @@ from src.config import (
     load_settings,
     load_vision_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_openai
 
 _IMAGE_SIGNATURES = (
     (b"\x89PNG\r\n\x1a\n", ".png"),
@@ -204,7 +205,7 @@ def _call_vision_model(
     encoded_image: str,
     mime_type: str,
     vision_settings: VisionSettings,
-) -> str:
+) -> tuple[str, UsageDetails | None]:
     try:
         response = client.chat.completions.create(
             model=vision_settings.model,
@@ -250,14 +251,14 @@ def _call_vision_model(
 
     text = _strip_markdown_fences(_extract_response_text(message.content))
     _detect_model_refusal(text)
-    return text
+    return text, usage_details_from_openai(response.usage)
 
 
 def parse_contract_image(
     image_path: str,
     openai_client: OpenAI | None = None,
     vision_settings: VisionSettings | None = None,
-) -> str:
+) -> tuple[str, UsageDetails | None]:
     
     resolved_vision_settings = vision_settings or load_vision_settings()
     path = validate_contract_image_file(image_path, resolved_vision_settings)

@@ -23,6 +23,7 @@ from src.config import (
 )
 from src.image_parser import ImageParserError, parse_contract_image
 from src.input_validation import InputValidationError, validate_pipeline_inputs
+from src.model_usage import UsageDetails
 from src.models import ContractChangeOutput
 
 TRACE_NAME = "contract-analysis"
@@ -95,6 +96,17 @@ def _record_stage_error(span: object, exc: Exception) -> None:
         status_message=str(exc),
         output={"error_type": type(exc).__name__},
     )
+
+
+def _update_span_output(
+    span: object,
+    output: object,
+    usage_details: UsageDetails | None = None,
+) -> None:
+    update_kwargs: dict[str, object] = {"output": output}
+    if usage_details is not None:
+        update_kwargs["usage_details"] = usage_details
+    span.update(**update_kwargs)
 
 
 def run_pipeline(
@@ -172,7 +184,7 @@ def _parse_original_contract(
 ) -> str:
     stage = "parse_original_contract"
     with langfuse.start_as_current_observation(
-        as_type="span",
+        as_type="generation",
         name=stage,
         input={"image_path": image_path},
         metadata=_build_stage_metadata(
@@ -184,7 +196,7 @@ def _parse_original_contract(
         model_parameters={"temperature": vision_settings.temperature},
     ) as span:
         try:
-            text = parse_contract_image(
+            text, usage_details = parse_contract_image(
                 image_path,
                 openai_client=openai_client,
                 vision_settings=vision_settings,
@@ -193,11 +205,13 @@ def _parse_original_contract(
             _record_stage_error(span, exc)
             raise PipelineError(stage, str(exc)) from exc
 
-        span.update(
-            output={
+        _update_span_output(
+            span,
+            {
                 "text_length": len(text),
                 "text_preview": _text_preview(text),
-            }
+            },
+            usage_details,
         )
         return text
 
@@ -210,7 +224,7 @@ def _parse_amendment_contract(
 ) -> str:
     stage = "parse_amendment_contract"
     with langfuse.start_as_current_observation(
-        as_type="span",
+        as_type="generation",
         name=stage,
         input={"image_path": image_path},
         metadata=_build_stage_metadata(
@@ -222,7 +236,7 @@ def _parse_amendment_contract(
         model_parameters={"temperature": vision_settings.temperature},
     ) as span:
         try:
-            text = parse_contract_image(
+            text, usage_details = parse_contract_image(
                 image_path,
                 openai_client=openai_client,
                 vision_settings=vision_settings,
@@ -231,11 +245,13 @@ def _parse_amendment_contract(
             _record_stage_error(span, exc)
             raise PipelineError(stage, str(exc)) from exc
 
-        span.update(
-            output={
+        _update_span_output(
+            span,
+            {
                 "text_length": len(text),
                 "text_preview": _text_preview(text),
-            }
+            },
+            usage_details,
         )
         return text
 
@@ -249,7 +265,7 @@ def _run_contextualization(
 ) -> str:
     stage = "contextualization_agent"
     with langfuse.start_as_current_observation(
-        as_type="span",
+        as_type="generation",
         name=stage,
         input={
             "original_text_length": len(original_text),
@@ -264,16 +280,18 @@ def _run_contextualization(
         model_parameters={"temperature": agent_settings.temperature},
     ) as span:
         try:
-            context_map = agent.analyze(original_text, amendment_text)
+            context_map, usage_details = agent.analyze(original_text, amendment_text)
         except Exception as exc:
             _record_stage_error(span, exc)
             raise PipelineError(stage, str(exc)) from exc
 
-        span.update(
-            output={
+        _update_span_output(
+            span,
+            {
                 "context_map_length": len(context_map),
                 "context_map_preview": _text_preview(context_map),
-            }
+            },
+            usage_details,
         )
         return context_map
 
@@ -288,7 +306,7 @@ def _run_extraction(
 ) -> ContractChangeOutput:
     stage = "extraction_agent"
     with langfuse.start_as_current_observation(
-        as_type="span",
+        as_type="generation",
         name=stage,
         input={
             "original_text_length": len(original_text),
@@ -304,10 +322,12 @@ def _run_extraction(
         model_parameters={"temperature": agent_settings.temperature},
     ) as span:
         try:
-            result = agent.analyze(original_text, amendment_text, context_map)
+            result, usage_details = agent.analyze(
+                original_text, amendment_text, context_map
+            )
         except Exception as exc:
             _record_stage_error(span, exc)
             raise PipelineError(stage, str(exc)) from exc
 
-        span.update(output=result.model_dump())
+        _update_span_output(span, result.model_dump(), usage_details)
         return result
