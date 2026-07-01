@@ -1,5 +1,3 @@
-import json
-import time
 from dataclasses import dataclass
 
 from langfuse import Langfuse
@@ -29,27 +27,6 @@ from src.models import ContractChangeOutput
 
 TRACE_NAME = "contract-analysis"
 TEXT_PREVIEW_LENGTH = 500
-_DEBUG_LOG_PATH = "debug-afe3d7.log"
-
-
-def _debug_log(
-    location: str,
-    message: str,
-    data: dict,
-    hypothesis_id: str,
-) -> None:
-    # #region agent log
-    payload = {
-        "sessionId": "afe3d7",
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-        "timestamp": int(time.time() * 1000),
-    }
-    with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
-        log_file.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    # #endregion
 
 
 @dataclass(frozen=True)
@@ -159,38 +136,12 @@ def run_pipeline(
                 original_image_path,
                 vision_settings,
             )
-            # #region agent log
-            _debug_log(
-                "pipeline.py:parse_original",
-                "original OCR text captured",
-                {
-                    "text_length": len(original_text),
-                    "text_preview": _text_preview(original_text),
-                    "has_12_months": "12" in original_text,
-                    "has_duracion": "duracion" in original_text.lower(),
-                },
-                "A",
-            )
-            # #endregion
             amendment_text = _parse_amendment_contract(
                 langfuse,
                 clients.openai_client,
                 amendment_image_path,
                 vision_settings,
             )
-            # #region agent log
-            _debug_log(
-                "pipeline.py:parse_amendment",
-                "amendment OCR text captured",
-                {
-                    "text_length": len(amendment_text),
-                    "text_preview": _text_preview(amendment_text),
-                    "has_18_months": "18" in amendment_text,
-                    "has_clausula_2": "clausula 2" in amendment_text.lower(),
-                },
-                "A",
-            )
-            # #endregion
             context_map = _run_contextualization(
                 langfuse,
                 clients.contextualization_agent,
@@ -198,19 +149,6 @@ def run_pipeline(
                 amendment_text,
                 contextualization_settings,
             )
-            # #region agent log
-            _debug_log(
-                "pipeline.py:contextualization",
-                "context map produced",
-                {
-                    "context_map_length": len(context_map),
-                    "context_map_preview": _text_preview(context_map),
-                    "mentions_clause_2": "clausula 2" in context_map.lower()
-                    or "clause 2" in context_map.lower(),
-                },
-                "B",
-            )
-            # #endregion
             result = _run_extraction(
                 langfuse,
                 clients.extraction_agent,
@@ -219,14 +157,6 @@ def run_pipeline(
                 context_map,
                 extraction_settings,
             )
-            # #region agent log
-            _debug_log(
-                "pipeline.py:extraction",
-                "final extraction result",
-                result.model_dump(),
-                "C",
-            )
-            # #endregion
 
             root_span.update(output=result.model_dump())
             return result

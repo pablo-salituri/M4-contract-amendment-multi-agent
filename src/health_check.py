@@ -1,40 +1,48 @@
 import sys
 
+from rich.panel import Panel
+
 from src.config import (
     PROJECT_ROOT,
     Settings,
     create_langfuse_client,
     load_settings,
 )
+from src.console_ui import console, err_console
 
 _TOTAL_STEPS = 5
+_current_step: tuple[int, str] | None = None
 
 
 def run_health_check() -> None:
-    print("Running health check...")
+    console.print()
+    console.print(Panel("🔍 Running health check...", border_style="dim", expand=False))
     _check_env_file()
     settings = _check_required_settings()
     _check_openai_api_key(settings)
     _check_langfuse_configuration(settings)
-    print("All health checks completed successfully.")
+    console.print("[success]✅ All health checks completed successfully.[/]")
+    console.print()
 
 
 def _step_start(step: int, description: str) -> None:
-    print(f"[{step}/{_TOTAL_STEPS}] {description}...", end=" ", flush=True)
+    global _current_step
+    _current_step = (step, description)
 
 
 def _step_ok(detail: str | None = None) -> None:
-    if detail:
-        print(f"OK ({detail})")
-    else:
-        print("OK")
+    step, description = _current_step or (0, "")
+    detail_suffix = f" [info]({detail})[/]" if detail else ""
+    console.print(
+        f"[step][{step}/{_TOTAL_STEPS}][/] {description}... "
+        f"[success]✅ OK[/]{detail_suffix}"
+    )
 
 
 def _step_fail(step: int, description: str, message: str) -> None:
-    print("FAILED")
-    print(
-        f"Health check failed at step [{step}/{_TOTAL_STEPS}] {description}: {message}",
-        file=sys.stderr,
+    console.print("[error]❌ FAILED[/]")
+    err_console.print(
+        f"Health check failed at step [{step}/{_TOTAL_STEPS}] {description}: {message}"
     )
     sys.exit(1)
 

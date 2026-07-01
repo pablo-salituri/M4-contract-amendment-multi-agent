@@ -1,6 +1,4 @@
-import json
 import re
-import time
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -20,27 +18,6 @@ _NUMBERED_PREFIX = re.compile(r"^[\s]*\d+[.)]\s+", re.MULTILINE)
 _MARKDOWN_EMPHASIS = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_")
 _WHITESPACE = re.compile(r"[ \t]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
-_DEBUG_LOG_PATH = "debug-afe3d7.log"
-
-
-def _debug_log(
-    location: str,
-    message: str,
-    data: dict,
-    hypothesis_id: str,
-) -> None:
-    # #region agent log
-    payload = {
-        "sessionId": "afe3d7",
-        "location": location,
-        "message": message,
-        "data": data,
-        "hypothesisId": hypothesis_id,
-        "timestamp": int(time.time() * 1000),
-    }
-    with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
-        log_file.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    # #endregion
 
 
 class ExtractionAgentError(Exception):
@@ -100,22 +77,6 @@ class ExtractionAgent:
 
         try:
             result = self._structured_llm.invoke(messages)
-            # #region agent log
-            raw_dump = (
-                result.model_dump()
-                if isinstance(result, ContractChangeOutput)
-                else dict(result) if isinstance(result, dict) else str(result)
-            )
-            _debug_log(
-                "extraction_agent.py:invoke",
-                "raw structured LLM output",
-                {
-                    "result_type": type(result).__name__,
-                    "raw_output": raw_dump,
-                },
-                "D",
-            )
-            # #endregion
         except RateLimitError as exc:
             raise ExtractionModelError(f"OpenAI rate limit exceeded: {exc}") from exc
         except APITimeoutError as exc:
@@ -126,19 +87,7 @@ class ExtractionAgent:
             raise ExtractionModelError(f"OpenAI API error: {exc}") from exc
 
         validated = self._validate_output(result)
-        normalized = self._normalize_output(validated)
-        # #region agent log
-        _debug_log(
-            "extraction_agent.py:normalize",
-            "output after validation and normalization",
-            {
-                "validated": validated.model_dump(),
-                "normalized": normalized.model_dump(),
-            },
-            "E",
-        )
-        # #endregion
-        return normalized
+        return self._normalize_output(validated)
 
     @staticmethod
     def _validate_input(value: str, label: str) -> None:
