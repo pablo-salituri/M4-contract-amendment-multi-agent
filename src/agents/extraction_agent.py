@@ -49,6 +49,7 @@ class ExtractionAgent:
         else:
             self._llm = llm
 
+        #Tells LangChain/OpenAI to respond in JSON according to that model's schema.
         self._structured_llm = self._llm.with_structured_output(ContractChangeOutput)
 
     def analyze(
@@ -57,8 +58,8 @@ class ExtractionAgent:
         amendment_contract_text: str,
         contextual_map: str,
     ) -> ContractChangeOutput:
-        
         #Returns a Pydantic-validated result.
+        
         self._validate_input(original_contract_text, "original contract")
         self._validate_input(amendment_contract_text, "amendment contract")
         self._validate_input(contextual_map, "contextual map")
@@ -99,6 +100,7 @@ class ExtractionAgent:
             return result
 
         try:
+            # Parses and validates the LLM response against the Pydantic schema.
             return ContractChangeOutput.model_validate(result)
         except ValidationError as exc:
             raise ExtractionValidationError(
