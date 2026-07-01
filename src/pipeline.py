@@ -1,5 +1,3 @@
-"""Contract amendment analysis pipeline with Langfuse instrumentation."""
-
 from dataclasses import dataclass
 
 from langfuse import Langfuse
@@ -40,8 +38,6 @@ class PipelineClients:
 
 
 class PipelineError(Exception):
-    """Raised when a pipeline stage fails."""
-
     def __init__(self, stage: str, message: str) -> None:
         self.stage = stage
         self.message = message
@@ -52,7 +48,7 @@ class PipelineError(Exception):
 
 
 def create_pipeline_clients(settings: Settings | None = None) -> PipelineClients:
-    """Create reusable clients and agents for a pipeline run."""
+    
     resolved_settings = settings or load_settings()
     contextualization_settings = load_contextualization_settings()
     extraction_settings = load_extraction_settings()
@@ -106,7 +102,7 @@ def run_pipeline(
     amendment_image_path: str,
     clients: PipelineClients,
 ) -> ContractChangeOutput:
-    """Run the full contract analysis pipeline and return validated output."""
+    
     try:
         validate_pipeline_inputs(original_image_path, amendment_image_path)
     except InputValidationError as exc:

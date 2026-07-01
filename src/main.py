@@ -1,5 +1,3 @@
-"""Entry point for the contract amendment analysis pipeline."""
-
 import json
 import sys
 import threading
@@ -29,8 +27,6 @@ def _print_welcome(original_image_path: str, amendment_image_path: str) -> None:
 
 
 class _AsciiSpinner:
-    """Simple ASCII spinner shown on stderr while the pipeline runs."""
-
     def __init__(self, message: str = "Analyzing contracts") -> None:
         self._message = message
         self._stop_event = threading.Event()

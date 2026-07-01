@@ -1,5 +1,3 @@
-"""Extraction agent for identifying contract amendment changes."""
-
 import re
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -39,8 +37,6 @@ class ExtractionValidationError(ExtractionAgentError):
 
 
 class ExtractionAgent:
-    """Identifies contract changes using a contextual map and returns validated output."""
-
     def __init__(
         self,
         llm: BaseChatModel | None = None,
@@ -61,7 +57,8 @@ class ExtractionAgent:
         amendment_contract_text: str,
         contextual_map: str,
     ) -> ContractChangeOutput:
-        """Identify amendment changes and return a Pydantic-validated result."""
+        
+        #Returns a Pydantic-validated result.
         self._validate_input(original_contract_text, "original contract")
         self._validate_input(amendment_contract_text, "amendment contract")
         self._validate_input(contextual_map, "contextual map")
@@ -110,7 +107,7 @@ class ExtractionAgent:
 
     @staticmethod
     def _normalize_output(result: ContractChangeOutput) -> ContractChangeOutput:
-        """Apply lightweight post-processing for consistent, plain-text output."""
+        
         return ContractChangeOutput(
             sections_changed=result.sections_changed,
             topics_touched=ExtractionAgent._normalize_topics(result.topics_touched),
@@ -135,7 +132,7 @@ class ExtractionAgent:
 
     @staticmethod
     def _sanitize_summary(summary: str) -> str:
-        """Strip markdown artifacts and normalize whitespace in the summary."""
+        
         text = summary.strip()
         text = _BULLET_PREFIX.sub("", text)
         text = _NUMBERED_PREFIX.sub("", text)

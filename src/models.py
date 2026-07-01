@@ -4,8 +4,6 @@ from pydantic import BaseModel, Field
 
 
 class ContractChangeOutput(BaseModel):
-    """Structured output describing changes introduced by a contract amendment."""
-
     sections_changed: list[str] = Field(
         description=(
             "List of section identifiers or titles that were added, removed, "

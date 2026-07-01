@@ -1,5 +1,3 @@
-"""Early input validation before running the contract analysis pipeline."""
-
 from pathlib import Path
 
 from src.config import VisionSettings, load_vision_settings
@@ -9,8 +7,6 @@ INPUT_VALIDATION_STAGE = "input_validation"
 
 
 class InputValidationError(Exception):
-    """Raised when pipeline inputs fail validation before processing."""
-
     def __init__(self, message: str) -> None:
         self.stage = INPUT_VALIDATION_STAGE
         self.message = message
@@ -24,7 +20,7 @@ def validate_pipeline_inputs(
     original_image_path: str,
     amendment_image_path: str,
 ) -> None:
-    """Validate both contract image paths before starting the pipeline."""
+    
     if not original_image_path.strip():
         raise InputValidationError("Original contract image path is empty.")
     if not amendment_image_path.strip():

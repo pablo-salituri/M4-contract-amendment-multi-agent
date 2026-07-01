@@ -1,5 +1,3 @@
-"""Environment validation before running the contract analysis pipeline."""
-
 import sys
 
 from src.config import (
@@ -13,10 +11,6 @@ _TOTAL_STEPS = 5
 
 
 def run_health_check() -> None:
-    """Validate environment configuration and external service connectivity.
-
-    Prints a clear error message and exits with code 1 if any check fails.
-    """
     print("Running health check...")
     _check_env_file()
     settings = _check_required_settings()
@@ -43,14 +37,6 @@ def _step_fail(step: int, description: str, message: str) -> None:
         file=sys.stderr,
     )
     sys.exit(1)
-
-
-def _mask_secret(value: str) -> str:
-    """Return a safe preview of a secret for debug output."""
-    stripped = value.strip()
-    if len(stripped) <= 8:
-        return "****"
-    return f"{stripped[:4]}...{stripped[-4:]}"
 
 
 def _check_env_file() -> None:
@@ -99,7 +85,7 @@ def _check_openai_api_key(settings: Settings) -> None:
             "OPENAI_API_KEY still contains the placeholder value from .env.example.",
         )
 
-    _step_ok(f"key {_mask_secret(api_key)}")
+    _step_ok()
 
 
 def _check_langfuse_configuration(settings: Settings) -> None:
@@ -126,10 +112,7 @@ def _check_langfuse_configuration(settings: Settings) -> None:
     if not host:
         _step_fail(step, description, "LANGFUSE_HOST is empty.")
 
-    _step_ok(
-        f"host={host}, public_key={_mask_secret(public_key)}, "
-        f"secret_key={_mask_secret(secret_key)}"
-    )
+    _step_ok(f"host={host}")
 
     step = 5
     description = "Checking Langfuse connectivity"

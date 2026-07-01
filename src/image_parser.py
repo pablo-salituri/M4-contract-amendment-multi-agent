@@ -214,7 +214,7 @@ def parse_contract_image(
     openai_client: OpenAI | None = None,
     vision_settings: VisionSettings | None = None,
 ) -> str:
-    """Extract plain text from a contract image using GPT-4o Vision."""
+    
     resolved_vision_settings = vision_settings or load_vision_settings()
     path = validate_contract_image_file(image_path, resolved_vision_settings)
     encoded_image, mime_type = _read_and_encode_image(path, resolved_vision_settings)

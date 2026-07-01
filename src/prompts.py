@@ -1,5 +1,3 @@
-"""Centralized prompts for contract analysis agents."""
-
 CONTEXTUALIZATION_SYSTEM_PROMPT = """You are a senior legal document structure analyst specializing in \
 contract organization and cross-document alignment.
 
