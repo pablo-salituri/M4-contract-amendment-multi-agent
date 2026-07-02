@@ -34,6 +34,38 @@
 
 Linear pipeline — no branches, no automatic retries. Each stage runs exactly once; a failure stops execution immediately.
 
+```text
+        Original image
+              |
+              v
+   parse_original_contract (GPT-4o Vision)
+              |
+              v
+        Original text
+              |                  
+              v                  
+        Amendment image          
+              |                  
+              v                  
+   parse_amendment_contract      
+        (GPT-4o Vision)          
+              |                  
+              v                  
+        Amendment text 
+              |
+              v
+   contextualization_agent
+              |
+              v
+         Context map
+              |
+              v
+      extraction_agent
+              |
+              v
+   ContractChangeOutput (JSON)
+```
+
 1. **Health check** — Validates `.env`, API credentials, and Langfuse connectivity.
 2. `parse_original_contract` — Transcribes the original contract image via GPT-4o Vision.
 3. `parse_amendment_contract` — Transcribes the amendment image.
@@ -176,6 +208,8 @@ python -m src.main data/test_contracts/documento_2__original.jpg data/test_contr
   "summary_of_the_change": "La duracion se extiende de 12 a 18 meses. El canon mensual pasa de $50.000 a $65.000."
 }
 ```
+
+
 
 ## Supported image formats: `.jpg`, `.jpeg`, `.png`.
 
