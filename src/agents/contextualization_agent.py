@@ -1,5 +1,3 @@
-"""Contextualization agent for building structural context maps between contracts."""
-
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
@@ -10,6 +8,7 @@ from src.config import (
     load_contextualization_settings,
     load_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_langchain
 
 
 class ContextualizationAgentError(Exception):
@@ -29,8 +28,6 @@ class EmptyContextMapError(ContextualizationAgentError):
 
 
 class ContextualizationAgent:
-    """Builds a structural context map from two parsed contract texts."""
-
     def __init__(
         self,
         llm: BaseChatModel | None = None,
@@ -47,8 +44,8 @@ class ContextualizationAgent:
         self,
         original_contract_text: str,
         amendment_contract_text: str,
-    ) -> str:
-        """Produce a contextual map describing structure and section alignment."""
+    ) -> tuple[str, UsageDetails | None]:
+        
         self._validate_contract_text(original_contract_text, "original")
         self._validate_contract_text(amendment_contract_text, "amendment")
 
@@ -93,7 +90,7 @@ class ContextualizationAgent:
         if not context_map:
             raise EmptyContextMapError("Model returned an empty contextual map.")
 
-        return context_map
+        return context_map, usage_details_from_langchain(response.usage_metadata)
 
     @staticmethod
     def _validate_contract_text(contract_text: str, label: str) -> None:

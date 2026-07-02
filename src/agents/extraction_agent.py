@@ -1,4 +1,4 @@
-"""Extraction agent for identifying contract amendment changes."""
+import re
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -11,7 +11,14 @@ from src.config import (
     load_extraction_settings,
     load_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_langchain
 from src.models import ContractChangeOutput
+
+_BULLET_PREFIX = re.compile(r"^[\s]*[-*•]\s+", re.MULTILINE)
+_NUMBERED_PREFIX = re.compile(r"^[\s]*\d+[.)]\s+", re.MULTILINE)
+_MARKDOWN_EMPHASIS = re.compile(r"\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_")
+_WHITESPACE = re.compile(r"[ \t]+")
+_BLANK_LINES = re.compile(r"\n{3,}")
 
 
 class ExtractionAgentError(Exception):
@@ -31,8 +38,6 @@ class ExtractionValidationError(ExtractionAgentError):
 
 
 class ExtractionAgent:
-    """Identifies contract changes using a contextual map and returns validated output."""
-
     def __init__(
         self,
         llm: BaseChatModel | None = None,
@@ -45,15 +50,20 @@ class ExtractionAgent:
         else:
             self._llm = llm
 
-        self._structured_llm = self._llm.with_structured_output(ContractChangeOutput)
+        #Tells LangChain/OpenAI to respond in JSON according to that model's schema.
+        self._structured_llm = self._llm.with_structured_output(
+            ContractChangeOutput,
+            include_raw=True,
+        )
 
     def analyze(
         self,
         original_contract_text: str,
         amendment_contract_text: str,
         contextual_map: str,
-    ) -> ContractChangeOutput:
-        """Identify amendment changes and return a Pydantic-validated result."""
+    ) -> tuple[ContractChangeOutput, UsageDetails | None]:
+        #Returns a Pydantic-validated result.
+        
         self._validate_input(original_contract_text, "original contract")
         self._validate_input(amendment_contract_text, "amendment contract")
         self._validate_input(contextual_map, "contextual map")
@@ -70,7 +80,7 @@ class ExtractionAgent:
         ]
 
         try:
-            result = self._structured_llm.invoke(messages)
+            response = self._structured_llm.invoke(messages)
         except RateLimitError as exc:
             raise ExtractionModelError(f"OpenAI rate limit exceeded: {exc}") from exc
         except APITimeoutError as exc:
@@ -80,7 +90,19 @@ class ExtractionAgent:
         except APIError as exc:
             raise ExtractionModelError(f"OpenAI API error: {exc}") from exc
 
-        return self._validate_output(result)
+        usage_details = None
+        if isinstance(response, dict):
+            raw_message = response.get("raw")
+            if raw_message is not None:
+                usage_details = usage_details_from_langchain(
+                    getattr(raw_message, "usage_metadata", None)
+                )
+            parsed = response.get("parsed")
+        else:
+            parsed = response
+
+        validated = self._validate_output(parsed)
+        return self._normalize_output(validated), usage_details
 
     @staticmethod
     def _validate_input(value: str, label: str) -> None:
@@ -93,8 +115,49 @@ class ExtractionAgent:
             return result
 
         try:
+            # Parses and validates the LLM response against the Pydantic schema.
             return ContractChangeOutput.model_validate(result)
         except ValidationError as exc:
             raise ExtractionValidationError(
                 f"Model output failed Pydantic validation: {exc}"
             ) from exc
+
+
+    @staticmethod
+    def _normalize_output(result: ContractChangeOutput) -> ContractChangeOutput:
+        #Normalizes the output to ensure consistency and readability.
+        return ContractChangeOutput(
+            sections_changed=result.sections_changed,
+            topics_touched=ExtractionAgent._normalize_topics(result.topics_touched),
+            summary_of_the_change=ExtractionAgent._sanitize_summary(
+                result.summary_of_the_change
+            ),
+        )
+
+
+    @staticmethod
+    def _normalize_topics(topics: list[str]) -> list[str]:
+        #Deduplicate topics and enforce consistent lowercase phrasing.
+        normalized: list[str] = []
+        seen: set[str] = set()
+
+        for topic in topics:
+            cleaned = _WHITESPACE.sub(" ", topic.strip()).lower()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                normalized.append(cleaned)
+
+        return normalized
+
+
+    @staticmethod
+    def _sanitize_summary(summary: str) -> str:
+        
+        text = summary.strip()
+        text = _BULLET_PREFIX.sub("", text)
+        text = _NUMBERED_PREFIX.sub("", text)
+        text = _MARKDOWN_EMPHASIS.sub(
+            lambda match: next(group for group in match.groups() if group), text
+        )
+        text = _BLANK_LINES.sub("\n\n", text)
+        return text.strip()

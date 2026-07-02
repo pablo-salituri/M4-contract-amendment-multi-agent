@@ -17,6 +17,7 @@ from src.config import (
     load_settings,
     load_vision_settings,
 )
+from src.model_usage import UsageDetails, usage_details_from_openai
 
 _IMAGE_SIGNATURES = (
     (b"\x89PNG\r\n\x1a\n", ".png"),
@@ -52,6 +53,22 @@ class EmptyModelResponseError(ImageParserError):
     """Raised when the model returns an empty or invalid response."""
 
 
+class ModelRefusalError(ImageParserError):
+    """Raised when the model refuses to transcribe the image."""
+
+
+_REFUSAL_PATTERNS = (
+    "i'm sorry",
+    "i am sorry",
+    "i can't assist",
+    "i cannot assist",
+    "i can't help",
+    "i cannot help",
+    "unable to assist",
+    "unable to help",
+)
+
+
 def _validate_image_path(image_path: Path, vision_settings: VisionSettings) -> None:
     if not image_path.exists():
         raise ImageNotFoundError(f"Image file not found: {image_path}")
@@ -66,6 +83,31 @@ def _validate_image_path(image_path: Path, vision_settings: VisionSettings) -> N
             f"Unsupported image extension '{extension}'. "
             f"Supported extensions: {supported}"
         )
+
+
+def _validate_image_size(image_path: Path) -> None:
+    try:
+        file_size = image_path.stat().st_size
+    except OSError as exc:
+        raise ImageReadError(
+            f"Unable to read file size for '{image_path}': {exc}"
+        ) from exc
+
+    if file_size == 0:
+        raise ImageReadError(f"Image file is empty (0 bytes): {image_path}")
+
+
+def validate_contract_image_file(
+    image_path: Path | str,
+    vision_settings: VisionSettings | None = None,
+) -> Path:
+    
+    #Validate an image path before sending data to OpenAI.
+    path = Path(image_path)
+    resolved_settings = vision_settings or load_vision_settings()
+    _validate_image_path(path, resolved_settings)
+    _validate_image_size(path)
+    return path
 
 
 def _detect_image_format(image_bytes: bytes) -> str | None:
@@ -117,6 +159,28 @@ def _read_and_encode_image(
     return encoded_image, mime_type
 
 
+def _strip_markdown_fences(text: str) -> str:
+    #Remove Markdown delimiters
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    return stripped
+
+
+def _detect_model_refusal(text: str) -> None:
+    normalized = text.strip().lower()
+    if any(pattern in normalized for pattern in _REFUSAL_PATTERNS):
+        raise ModelRefusalError(
+            "Vision model refused to transcribe the image. "
+            f"Response preview: {text[:120]}"
+        )
+
+
 def _extract_response_text(response_content: object) -> str:
     if isinstance(response_content, str):
         text = response_content.strip()
@@ -143,13 +207,17 @@ def _call_vision_model(
     encoded_image: str,
     mime_type: str,
     vision_settings: VisionSettings,
-) -> str:
+) -> tuple[str, UsageDetails | None]:
     try:
         response = client.chat.completions.create(
             model=vision_settings.model,
             temperature=vision_settings.temperature,
             max_tokens=vision_settings.max_tokens,
             messages=[
+                {
+                    "role": "system",
+                    "content": vision_settings.extraction_system_prompt,
+                },
                 {
                     "role": "user",
                     "content": [
@@ -158,10 +226,11 @@ def _call_vision_model(
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:{mime_type};base64,{encoded_image}",
+                                "detail": "high",
                             },
                         },
                     ],
-                }
+                },
             ],
         )
     except RateLimitError as exc:
@@ -182,20 +251,23 @@ def _call_vision_model(
     if message is None or message.content is None:
         raise EmptyModelResponseError("OpenAI returned a completion without content.")
 
-    return _extract_response_text(message.content)
+    text = _strip_markdown_fences(_extract_response_text(message.content))
+    _detect_model_refusal(text)
+    return text, usage_details_from_openai(response.usage)
 
 
 def parse_contract_image(
     image_path: str,
     openai_client: OpenAI | None = None,
-) -> str:
-    """Extract plain text from a contract image using GPT-4o Vision."""
-    path = Path(image_path)
-    vision_settings = load_vision_settings()
-
-    _validate_image_path(path, vision_settings)
-    encoded_image, mime_type = _read_and_encode_image(path, vision_settings)
+    vision_settings: VisionSettings | None = None,
+) -> tuple[str, UsageDetails | None]:
+    
+    resolved_vision_settings = vision_settings or load_vision_settings()
+    path = validate_contract_image_file(image_path, resolved_vision_settings)
+    encoded_image, mime_type = _read_and_encode_image(path, resolved_vision_settings)
 
     client = openai_client or create_openai_client(load_settings())
 
-    return _call_vision_model(client, encoded_image, mime_type, vision_settings)
+    return _call_vision_model(
+        client, encoded_image, mime_type, resolved_vision_settings
+    )
