@@ -6,19 +6,23 @@ from pydantic import BaseModel, Field
 class ContractChangeOutput(BaseModel):
     sections_changed: list[str] = Field(
         description=(
-            "List of section identifiers or titles that were added, removed, "
-            "or modified in the amendment."
+            "Lista de claves semánticas en snake_case para secciones o temas "
+            "con cambios confirmados en la enmienda "
+            "(p. ej., duracion, canon_mensual, alcance_territorial)."
         )
     )
     topics_touched: list[str] = Field(
         description=(
-            "List of contract topics affected by the amendment "
-            "(e.g., payment, term, parties, termination, liability)."
+            "Lista de frases descriptivas en español en minúsculas sobre los "
+            "conceptos contractuales afectados "
+            "(p. ej., duracion contractual, canon mensual de locacion, "
+            "alcance territorial, restriccion de uso)."
         )
     )
     summary_of_the_change: str = Field(
         description=(
-            "Concise summary of all changes, explicitly distinguishing "
-            "additions, deletions, and modifications."
+            "Resumen conciso en español de los cambios confirmados, "
+            "indicando valores anteriores y nuevos cuando estén visibles "
+            "en los textos."
         )
     )
