@@ -170,7 +170,6 @@ def create_contextualization_llm(
 
 
 def load_extraction_settings() -> ExtractionSettings:
-    """Load extraction agent configuration."""
     return ExtractionSettings(
         model=os.getenv("OPENAI_EXTRACTION_MODEL", "gpt-4o"),
         temperature=float(os.getenv("OPENAI_EXTRACTION_TEMPERATURE", "0")),

@@ -101,7 +101,8 @@ def validate_contract_image_file(
     image_path: Path | str,
     vision_settings: VisionSettings | None = None,
 ) -> Path:
-    """Validate an image path before sending data to OpenAI."""
+    
+    #Validate an image path before sending data to OpenAI.
     path = Path(image_path)
     resolved_settings = vision_settings or load_vision_settings()
     _validate_image_path(path, resolved_settings)
@@ -159,6 +160,7 @@ def _read_and_encode_image(
 
 
 def _strip_markdown_fences(text: str) -> str:
+    #Remove Markdown delimiters
     stripped = text.strip()
     if stripped.startswith("```"):
         lines = stripped.splitlines()

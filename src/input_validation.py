@@ -42,6 +42,7 @@ def validate_pipeline_inputs(
 
 def _validate_image(label: str, path: Path, vision_settings: VisionSettings) -> None:
     try:
+        #Validate an image path before sending data to OpenAI.
         validate_contract_image_file(path, vision_settings)
     except ImageParserError as exc:
         raise InputValidationError(f"{label} image: {exc}") from exc

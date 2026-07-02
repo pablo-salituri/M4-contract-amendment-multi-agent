@@ -122,9 +122,10 @@ class ExtractionAgent:
                 f"Model output failed Pydantic validation: {exc}"
             ) from exc
 
+
     @staticmethod
     def _normalize_output(result: ContractChangeOutput) -> ContractChangeOutput:
-        
+        #Normalizes the output to ensure consistency and readability.
         return ContractChangeOutput(
             sections_changed=result.sections_changed,
             topics_touched=ExtractionAgent._normalize_topics(result.topics_touched),
@@ -133,9 +134,10 @@ class ExtractionAgent:
             ),
         )
 
+
     @staticmethod
     def _normalize_topics(topics: list[str]) -> list[str]:
-        """Deduplicate topics and enforce consistent lowercase phrasing."""
+        #Deduplicate topics and enforce consistent lowercase phrasing.
         normalized: list[str] = []
         seen: set[str] = set()
 
@@ -146,6 +148,7 @@ class ExtractionAgent:
                 normalized.append(cleaned)
 
         return normalized
+
 
     @staticmethod
     def _sanitize_summary(summary: str) -> str:
